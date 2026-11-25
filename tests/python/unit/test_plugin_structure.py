@@ -9,7 +9,7 @@ import earth2_dku
 from earth2_dku.extract.derived import available_derived
 from earth2_dku.models.registry import list_models
 
-RECIPES = ["earth2-fetch-initial-conditions", "earth2-run-forecast", "earth2-extract-to-dataset"]
+RECIPES = ["earth2-run-forecast", "earth2-extract-to-dataset"]
 DATAIKU_ALLOWED = ("earth2_dku/dku/", "earth2_dku/storage/dku_folder.py")
 
 
@@ -31,9 +31,11 @@ def test_code_env(plugin_root):
 
 
 def test_all_component_json_parse(plugin_root):
-    files = list(plugin_root.glob("custom-recipes/*/recipe.json")) + list(plugin_root.glob("python-runnables/*/runnable.json"))
+    files = list(plugin_root.glob("custom-recipes/*/recipe.json"))
     files += list(plugin_root.glob("parameter-sets/*/parameter-set.json"))
-    assert len(files) == 5
+    assert len(files) == 3
+    assert sorted(f.parent.name for f in files[:-1]) == sorted(RECIPES)
+    assert not (plugin_root / "python-runnables").exists()
     for f in files:
         _json(f)
 
@@ -41,11 +43,9 @@ def test_all_component_json_parse(plugin_root):
 def test_preset_model_choices_match_registry(plugin_root):
     preset = _json(plugin_root / "parameter-sets/earth2-nim-connection/parameter-set.json")
     params = {p["name"]: p for p in preset["params"]}
-    assert set(params) == {"deployment", "base_url", "api_key", "model_id", "timeout_seconds", "gpu_memory_gb"}
+    assert set(params) == {"base_url", "model_id", "timeout_seconds"}
+    assert params["base_url"]["mandatory"]
     assert [c["value"] for c in params["model_id"]["selectChoices"]] == [m.model_id for m in list_models()]
-    assert params["api_key"]["type"] == "PASSWORD" and "nvcf_hosted" in params["api_key"]["visibilityCondition"]
-    labels = {c["value"]: c["label"] for c in params["deployment"]["selectChoices"]}
-    assert "experimental" in labels["nvcf_hosted"]
 
 
 def test_derived_choices_match_registry(plugin_root):
@@ -55,7 +55,7 @@ def test_derived_choices_match_registry(plugin_root):
 
 
 def test_preset_param_references(plugin_root):
-    for f in list(plugin_root.glob("custom-recipes/*/recipe.json")) + list(plugin_root.glob("python-runnables/*/runnable.json")):
+    for f in plugin_root.glob("custom-recipes/*/recipe.json"):
         for p in _json(f)["params"]:
             if p["type"] == "PRESET":
                 assert p["parameterSetId"] == "earth2-nim-connection"

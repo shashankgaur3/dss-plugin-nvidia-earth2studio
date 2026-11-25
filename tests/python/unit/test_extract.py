@@ -207,3 +207,7 @@ def test_pipeline_errors(storage):
         extract_forecast(storage, ExtractOptions(mode="region"))
     with pytest.raises(ConfigError, match="layout"):
         extract_forecast(storage, ExtractOptions(layout="tall"), SITES)
+    with pytest.raises(ConfigError, match="Unknown derived"):
+        extract_forecast(storage, ExtractOptions(derived=["x"]), SITES)
+    with pytest.raises(ConfigError, match="interpolation"):
+        extract_forecast(storage, ExtractOptions(interpolation="cubic"), SITES)

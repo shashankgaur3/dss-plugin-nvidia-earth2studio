@@ -72,19 +72,10 @@ class ModelSpec:
 
 def _spec_from_entry(model_id: str, entry: dict) -> ModelSpec:
     try:
-        return ModelSpec(
-            model_id=model_id,
-            label=str(entry["label"]),
-            nim_image=str(entry["nim_image"]),
-            input_variables_from=str(entry["input_variables_from"]),
-            n_channels=int(entry["n_channels"]),
-            step_hours=int(entry["step_hours"]),
-            min_gpu_mem_gb=int(entry["min_gpu_mem_gb"]),
-            supports_variables_param=_normalize_support(entry["supports_variables_param"]),
-            grid=str(entry["grid"]),
-        )
-    except KeyError as exc:
-        raise ConfigError(f"Model '{model_id}' in models.yaml is missing key {exc}.") from exc
+        support = _normalize_support(entry.get("supports_variables_param"))
+        return ModelSpec(model_id=model_id, **{**entry, "supports_variables_param": support})
+    except TypeError as exc:  # missing or unknown keys
+        raise ConfigError(f"Model '{model_id}' in models.yaml is invalid ({exc}). Fix models.yaml.") from exc
 
 
 def load_registry(path=None) -> dict[str, ModelSpec]:

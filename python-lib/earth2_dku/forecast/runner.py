@@ -1,16 +1,18 @@
-"""Run a forecast against a NIM and persist steps + manifest to storage."""
+"""Fetch initial conditions, run forecasts against a NIM, persist steps + manifest to storage."""
 from __future__ import annotations
 
 import logging
 import posixpath
 
-from ..errors import NimStreamBrokenError
+from ..errors import NimStreamBrokenError, PreflightError
 from ..extract.grid import get_grid
-from .manifest import Manifest, StepRecord, write_manifest
+from ..sources.cache import fetch_initial_condition
+from .manifest import Manifest, StepRecord, read_manifest, run_dir_for, write_manifest
 
 logger = logging.getLogger(__name__)
 
 STEPS_DIR = "steps"
+INPUTS_PREFIX = "inputs/"  # where initial conditions go when no separate folder is given
 
 
 def run_forecast(
@@ -69,6 +71,42 @@ def run_forecast(
         raise
 
     manifest.status = "complete"
-    manifest.steps_received = len(manifest.steps)
     write_manifest(storage, manifest, run_dir)
     return manifest
+
+
+def run_forecasts(
+    client,
+    model,
+    source,
+    ic_storage,
+    forecast_storage,
+    init_times,
+    simulation_length: int,
+    variables: list[str] | None,
+    fail_on_partial: bool = False,
+) -> list[Manifest]:
+    """For each init time: fetch (or reuse) the initial condition, then run and store the forecast.
+
+    NIM health is checked once, before anything is downloaded. A stream that breaks after at
+    least one step keeps the partial run and moves on, unless ``fail_on_partial``.
+    """
+    health = client.health()
+    if not health.ready:
+        raise PreflightError(f"The FourCastNet NIM is not ready: {health.detail}")
+    manifests = []
+    for init_time in init_times:
+        ref, cached = fetch_initial_condition(source, ic_storage, model, init_time)
+        logger.info("%s initial condition %s", "Reusing" if cached else "Fetched", ref.path)
+        run_dir = run_dir_for(ref.time)
+        try:
+            manifests.append(run_forecast(
+                client, model, forecast_storage, run_dir, ic_storage.read_bytes(ref.path), ref.time,
+                simulation_length, variables, source=ref.source,
+            ))
+        except NimStreamBrokenError as exc:
+            if fail_on_partial or exc.steps_received == 0:
+                raise
+            logger.warning("Keeping partial forecast %s (%d steps): %s", run_dir, exc.steps_received, exc)
+            manifests.append(read_manifest(forecast_storage, run_dir))
+    return manifests

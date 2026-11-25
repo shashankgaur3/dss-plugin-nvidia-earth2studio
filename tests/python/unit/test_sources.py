@@ -7,9 +7,7 @@ from earth2_dku.arrays import npy_bytes
 from earth2_dku.errors import ConfigError, PreflightError
 from earth2_dku.sources import build_source
 from earth2_dku.sources.base import validate_state_array
-from earth2_dku.sources.cache import (
-    CachedSource, fetch_initial_condition, find_initial_condition, ic_key, list_initial_conditions, parse_ic_key,
-)
+from earth2_dku.sources.cache import CachedSource, fetch_initial_condition, ic_key
 from earth2_dku.sources.era5_arco import Era5ArcoSource
 from earth2_dku.sources.gfs import GfsSource
 from earth2_dku.times import parse_time, to_rfc3339
@@ -45,9 +43,6 @@ def test_get_state_without_earth2studio_gives_clear_error(monkeypatch):
 def test_keys():
     k = ic_key("era5_arco", "fourcastnet-1.1.0", parse_time("2023-01-01T06"))
     assert k == "era5_arco/fourcastnet-1.1.0/20230101T06.npy"
-    ref = parse_ic_key("/" + k)
-    assert ref.source == "era5_arco" and ref.time == parse_time("2023-01-01T06")
-    assert parse_ic_key("other/file.txt") is None
 
 
 def test_validate_state_array():
@@ -97,16 +92,3 @@ def test_fetch_initial_condition(storage, monkeypatch):
     assert cached
     with pytest.raises(ConfigError, match="not yet available"):
         fetch_initial_condition(src, storage, model, "2030-01-01")
-
-
-def test_find_initial_condition(storage):
-    for key in ("era5_arco/m1/20230101T00.npy", "era5_arco/m1/20230101T06.npy", "gfs/m2/20230102T00.npy", "notes.txt"):
-        storage.write_bytes(key, b"x")
-    assert [r.path for r in list_initial_conditions(storage, "m1")] == [
-        "era5_arco/m1/20230101T00.npy", "era5_arco/m1/20230101T06.npy"]
-    assert find_initial_condition(storage, "m1").path.endswith("T06.npy")
-    assert find_initial_condition(storage, "m1", parse_time("2023-01-01T00")).path.endswith("T00.npy")
-    with pytest.raises(ConfigError, match="Available"):
-        find_initial_condition(storage, "m1", parse_time("2023-02-01"))
-    with pytest.raises(ConfigError, match="Fetch initial"):
-        find_initial_condition(storage, "m3")

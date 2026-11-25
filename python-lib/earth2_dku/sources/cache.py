@@ -2,19 +2,15 @@
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from datetime import datetime
 
 from ..arrays import load_npy, npy_bytes
 from ..errors import ConfigError, PreflightError
-from ..times import UTC, floor_to_cycle, parse_time
+from ..times import floor_to_cycle, parse_time
 from .base import InitialConditionSource, validate_state_array
 
 logger = logging.getLogger(__name__)
-
-_KEY_RE = re.compile(r"^(?P<source>[^/]+)/(?P<model>[^/]+)/(?P<time>\d{8}T\d{2})\.npy$")
-
 
 def ic_key(source_name: str, model_id: str, time) -> str:
     return f"{source_name}/{model_id}/{parse_time(time):%Y%m%dT%H}.npy"
@@ -26,47 +22,6 @@ class ICRef:
     model_id: str
     time: datetime
     path: str
-
-
-def parse_ic_key(path: str) -> ICRef | None:
-    m = _KEY_RE.match(path.lstrip("/"))
-    if not m:
-        return None
-    t = datetime.strptime(m["time"], "%Y%m%dT%H").replace(tzinfo=UTC)
-    return ICRef(m["source"], m["model"], t, path.lstrip("/"))
-
-
-def list_initial_conditions(storage, model_id: str | None = None) -> list[ICRef]:
-    refs = [r for r in (parse_ic_key(p) for p in storage.list()) if r]
-    if model_id:
-        refs = [r for r in refs if r.model_id == model_id]
-    return sorted(refs, key=lambda r: (r.time, r.source))
-
-
-def find_initial_condition(storage, model_id: str, init_time=None, source: str | None = None) -> ICRef:
-    """Pick the initial condition to run: the given init time, or the latest one present."""
-    refs = list_initial_conditions(storage, model_id)
-    if source:
-        refs = [r for r in refs if r.source == source]
-    if not refs:
-        raise ConfigError(
-            f"No initial conditions for model {model_id} in the input folder. Run the 'Fetch initial "
-            "conditions' recipe with the same connection preset (model) first."
-        )
-    if init_time is None:
-        latest = refs[-1].time
-        candidates = [r for r in refs if r.time == latest]
-    else:
-        wanted = parse_time(init_time)
-        candidates = [r for r in refs if r.time == wanted]
-        if not candidates:
-            raise ConfigError(
-                f"No initial condition for {wanted:%Y-%m-%dT%H}Z and model {model_id}. Available: "
-                f"{', '.join(sorted({f'{r.time:%Y-%m-%dT%H}' for r in refs}))}."
-            )
-    if len(candidates) > 1:
-        logger.warning("Several sources for %s; using %s.", candidates[0].time, candidates[0].source)
-    return candidates[0]
 
 
 class CachedSource(InitialConditionSource):
@@ -82,10 +37,6 @@ class CachedSource(InitialConditionSource):
     @property
     def name(self) -> str:
         return self.source.name
-
-    @property
-    def earliest_time(self):
-        return self.source.earliest_time
 
     def latest_available_time(self) -> datetime:
         return self.source.latest_available_time()

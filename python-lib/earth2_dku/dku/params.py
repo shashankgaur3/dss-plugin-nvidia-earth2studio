@@ -1,4 +1,4 @@
-"""Translate DSS recipe/preset/macro configs into core objects.
+"""Translate DSS recipe/preset configs into core objects.
 
 All Dataiku-specific config parsing lives here. ``dataiku`` is imported lazily so
 the pure parsing helpers stay unit-testable.
@@ -9,7 +9,6 @@ import logging
 from dataclasses import dataclass
 
 from ..errors import ConfigError
-from ..extract.derived import available_derived
 from ..extract.pipeline import ExtractOptions
 from ..extract.region import DEFAULT_MAX_CELLS, BBox
 from ..models.registry import get_model
@@ -23,12 +22,9 @@ DEFAULT_TIMEOUT = 1200
 
 @dataclass
 class ConnectionConfig:
-    deployment: str = "self_hosted"
     base_url: str = ""
-    api_key: str = ""
     model_id: str = "fourcastnet-1.1.0"
     timeout_seconds: int = DEFAULT_TIMEOUT
-    gpu_memory_gb: float | None = None
 
 
 def _blank(v) -> bool:
@@ -37,10 +33,6 @@ def _blank(v) -> bool:
 
 def as_int(v, default=None):
     return default if _blank(v) else int(float(v))
-
-
-def as_float(v, default=None):
-    return default if _blank(v) else float(v)
 
 
 def parse_list(value) -> list[str] | None:
@@ -56,16 +48,10 @@ def connection_from_config(config: dict, key: str = "connection") -> ConnectionC
     preset = (config or {}).get(key)
     if not isinstance(preset, dict) or not preset:
         raise ConfigError("Select an 'Earth-2 FourCastNet NIM connection' preset in the settings.")
-    deployment = preset.get("deployment") or "self_hosted"
-    if deployment not in ("self_hosted", "nvcf_hosted"):
-        raise ConfigError(f"Unknown deployment '{deployment}' in the preset.")
     return ConnectionConfig(
-        deployment=deployment,
         base_url=(preset.get("base_url") or "").strip(),
-        api_key=preset.get("api_key") or "",
         model_id=preset.get("model_id") or "fourcastnet-1.1.0",
         timeout_seconds=as_int(preset.get("timeout_seconds"), DEFAULT_TIMEOUT),
-        gpu_memory_gb=as_float(preset.get("gpu_memory_gb")),
     )
 
 
@@ -73,15 +59,12 @@ def build_model(conn: ConnectionConfig):
     return get_model(conn.model_id)
 
 
-def build_client(conn: ConnectionConfig, model=None):
-    if conn.deployment == "nvcf_hosted":
-        from ..clients.nvcf_hosted import NvcfHostedClient
-
-        return NvcfHostedClient(conn.api_key, timeout_seconds=conn.timeout_seconds)
+def build_client(conn: ConnectionConfig, model):
     from ..clients.self_hosted import SelfHostedNimClient
 
-    support = model.supports_variables_param if model is not None else "unverified"
-    return SelfHostedNimClient(conn.base_url, supports_variables_param=support, timeout_seconds=conn.timeout_seconds)
+    return SelfHostedNimClient(
+        conn.base_url, supports_variables_param=model.supports_variables_param, timeout_seconds=conn.timeout_seconds
+    )
 
 
 def build_source(config: dict):
@@ -98,7 +81,7 @@ def optional_time(config: dict, key: str = "init_time"):
 
 
 def resolve_init_times(config: dict, source) -> list:
-    """Init times for the fetch recipe, each rounded down to a 6-hour cycle."""
+    """Init times to forecast, each rounded down to a 6-hour cycle."""
     dates_input = _role_names("dates", output=False)
     if dates_input:
         column = config.get("dates_column")
@@ -136,11 +119,14 @@ def _role_names(role: str, output: bool) -> list[str]:
     return (get_output_names_for_role if output else get_input_names_for_role)(role)
 
 
-def folder_storage(role: str, output: bool = False):
+def folder_storage(role: str, output: bool = False, required: bool = True):
+    """Storage for the folder bound to ``role``; None if optional and not connected."""
     from ..storage.dku_folder import DkuFolderStorage
 
     names = _role_names(role, output)
     if not names:
+        if not required:
+            return None
         raise ConfigError(f"Connect a managed folder to the '{role}' role.")
     return DkuFolderStorage.from_name(names[0])
 
@@ -172,10 +158,6 @@ def sites_frame(df, config: dict):
 
 
 def extract_options(config: dict) -> ExtractOptions:
-    derived = list(config.get("derived") or [])
-    unknown = [d for d in derived if d not in available_derived()]
-    if unknown:
-        raise ConfigError(f"Unknown derived variables {unknown}. Available: {', '.join(available_derived())}.")
     mode = config.get("mode") or "points"
     bbox = None
     if mode == "region":
@@ -188,7 +170,7 @@ def extract_options(config: dict) -> ExtractOptions:
         init_time=config.get("init_time") or None,
         mode=mode,
         variables=parse_list(config.get("variables")),
-        derived=derived,
+        derived=list(config.get("derived") or []),
         interpolation=config.get("interpolation") or "nearest",
         layout=config.get("layout") or "long",
         bbox=bbox,

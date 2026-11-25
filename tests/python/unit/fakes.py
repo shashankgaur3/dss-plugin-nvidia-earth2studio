@@ -3,11 +3,9 @@ from __future__ import annotations
 
 import email
 import email.policy
-import io
 import socket
 import tarfile
 import threading
-from dataclasses import dataclass
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -77,10 +75,6 @@ def tar_member_bytes(name: str, data: bytes) -> bytes:
     info.size = len(data)
     info.mtime = 0
     return info.tobuf(format=tarfile.USTAR_FORMAT) + data + b"\0" * ((512 - len(data) % 512) % 512)
-
-
-def build_tar(files) -> bytes:
-    return b"".join(tar_member_bytes(n, d) for n, d in files) + b"\0" * 1024
 
 
 # ------------------------------------------------------------- fake NIM over HTTP
@@ -224,61 +218,6 @@ class FakeSource(InitialConditionSource):
         self.calls.append((time, list(variables)))
         shape = self.shape_override or (1, 1, len(variables), 721, 1440)
         return np.zeros(shape, dtype="float32")
-
-
-# ------------------------------------------------------------- fake HTTP session
-
-
-@dataclass
-class FakeResponse:
-    status_code: int
-    content: bytes = b""
-    headers: dict = None
-    json_body: dict = None
-
-    def __post_init__(self):
-        self.headers = self.headers or {}
-
-    @property
-    def text(self):
-        return self.content.decode("utf-8", "replace")
-
-    def json(self):
-        return self.json_body
-
-
-class FakeSession:
-    """Scripted session: routes (METHOD, url-prefix) to queued responses; records calls."""
-
-    def __init__(self, routes):
-        self.routes = {k: list(v) for k, v in routes.items()}
-        self.calls = []
-
-    def _handle(self, method, url, **kwargs):
-        self.calls.append((method, url, kwargs))
-        for (m, prefix), queue in self.routes.items():
-            if m == method and url.startswith(prefix) and queue:
-                return queue.pop(0) if len(queue) > 1 else queue[0]
-        raise AssertionError(f"unexpected {method} {url}")
-
-    def get(self, url, **kw):
-        return self._handle("GET", url, **kw)
-
-    def post(self, url, **kw):
-        return self._handle("POST", url, **kw)
-
-    def put(self, url, **kw):
-        return self._handle("PUT", url, **kw)
-
-
-def zip_bytes(files) -> bytes:
-    import zipfile
-
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        for n, d in files:
-            zf.writestr(n, d)
-    return buf.getvalue()
 
 
 def write_synthetic_run(storage, init_time="2023-01-01T00", variables=("lat", "lon", "lonc"), leads=(0, 6),

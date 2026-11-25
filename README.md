@@ -8,10 +8,8 @@ wind farm) into a table that you can join, chart, or feed to downstream models a
 | Component | Type | What it does |
 |---|---|---|
 | Earth-2 FourCastNet NIM connection | Preset | NIM endpoint, model version, timeout and GPU size |
-| Earth-2: fetch initial conditions | Recipe | ERA5 / GFS state for the model to start from → managed folder |
-| Earth-2: run forecast | Recipe | Calls the NIM, streams forecast steps → managed folder |
+| Earth-2: run forecast | Recipe | Downloads the ERA5 / GFS starting state, calls the NIM, stores the forecast steps → managed folder |
 | Earth-2: extract to dataset | Recipe | Values at sites (points) or over a bounding box (region) → dataset |
-| Earth-2: preflight check | Macro | Checks the endpoint, the model, Earth2Studio, the GPU size and the init time |
 
 Supported models (see `python-lib/earth2_dku/models/models.yaml`):
 
@@ -22,8 +20,7 @@ Supported models (see `python-lib/earth2_dku/models/models.yaml`):
 
 ## 1. Prerequisites
 
-- A FourCastNet NIM that DSS can reach over HTTP (self-hosted), **or** an NVIDIA API key for the hosted
-  API (experimental, see [Troubleshooting](#7-troubleshooting)).
+- A locally deployed FourCastNet NIM that DSS can reach over HTTP.
 - NVIDIA AI Enterprise licensing for self-hosted NIMs.
 - Outbound access from DSS to ERA5 (ARCO Zarr store on Google Cloud Storage) and/or NOAA GFS (AWS S3).
 - A Python **3.11** code environment for the plugin. The code env installs Earth2Studio, which pulls in
@@ -34,8 +31,7 @@ Supported models (see `python-lib/earth2_dku/models/models.yaml`):
 
 - **1.1.0** runs on a single **L40S (48 GB)**.
 - **2.0.0** needs a single GPU with **≥ 60 GB** (H100 80 GB or A100 80 GB). On an L40S it runs out of CUDA memory.
-- A model can't be split across several GPUs. Set *GPU memory (GB)* in the preset so the preflight
-  macro can catch a mismatch before you run anything.
+- A model can't be split across several GPUs. Pick the preset's model to match the GPU the NIM runs on.
 
 ## 3. Kubernetes deployment notes
 
@@ -50,22 +46,25 @@ Supported models (see `python-lib/earth2_dku/models/models.yaml`):
 ## 4. Quickstart
 
 1. **Preset.** In *Plugins → NVIDIA Earth-2 FourCastNet → Settings*, create an *Earth-2 FourCastNet NIM
-   connection* preset with deployment *Self-hosted NIM*, your base URL, model `fourcastnet-1.1.0` and
-   GPU memory `48`. Run the **Earth-2: preflight check** macro on it and check that every line says OK.
-2. **Fetch.** Add the *Earth-2: fetch initial conditions* recipe and select:
+   connection* preset with your NIM base URL and model `fourcastnet-1.1.0`.
+2. **Run.** Add the *Earth-2: run forecast* recipe with a new output folder `forecast`, and select:
    - the preset
-   - source *ERA5*
-   - time mode *Fixed*
-   - init time `2023-01-01T00:00:00Z`
-
-   It writes `era5_arco/fourcastnet-1.1.0/20230101T00.npy` (about 300 MB) to an output folder, e.g. `initial_conditions`.
-3. **Run.** Add *Earth-2: run forecast* on that folder and select:
-   - the same preset
+   - source *ERA5*, time mode *Fixed*, init time `2023-01-01T00:00:00Z`
    - simulation length `6` (36 h, 7 files including lead 0)
    - variables `u10m,v10m`
 
-   The output folder (e.g. `forecast`) receives `runs/init=2023-01-01T00/manifest.json` and `steps/*.npy`.
-4. **Extract.** Upload `resource/sample_sites.csv` from this plugin as a dataset `sites`. Then add
+   The recipe checks that the NIM is up, downloads the initial condition, then streams the forecast.
+   The `forecast` folder ends up with:
+
+   ```
+   inputs/era5_arco/fourcastnet-1.1.0/20230101T00.npy   initial condition, ~300 MB (cached)
+   runs/init=2023-01-01T00/manifest.json
+   runs/init=2023-01-01T00/steps/000_000.npy ... 036_000.npy
+   ```
+
+   To keep initial conditions apart (e.g. for a different retention policy), connect a second folder
+   to the optional *Initial conditions folder* output. They are then cached there instead of under `inputs/`.
+3. **Extract.** Upload `resource/sample_sites.csv` from this plugin as a dataset `sites`. Then add
    *Earth-2: extract to dataset* with inputs `forecast` and `sites`, and select:
    - mode *Points*
    - site columns `site_id`, `latitude`, `longitude`
@@ -91,23 +90,23 @@ A box with `lon_min > lon_max` crosses the antimeridian. Boxes around the 0° me
 
 ## 5. Scenario example: daily operational forecast
 
-Set the fetch recipe to source *GFS* and time mode *Latest available*. The GFS safety margin defaults
-to 6 h, to allow for publication delay. Leave *Init time* empty in the run recipe, so it uses the latest
-initial condition in the folder. In the extract recipe, select *Latest run*.
+Set the run recipe to source *GFS* and time mode *Latest available*. The GFS safety margin defaults
+to 6 h, to allow for publication delay. In the extract recipe, select *Latest run*.
 Then create a scenario with a time-based trigger (e.g. daily at 07:00 UTC) and one step that builds
 `forecast_values` recursively. Use run selection *All runs* if you want to keep a history for backtesting.
 
-For backfills, connect a dataset with a timestamp column to the optional *Init times* input of the fetch
-recipe. Each timestamp is rounded down to a 00/06/12/18 UTC cycle.
+For backfills, connect a dataset with a timestamp column to the optional *Init times* input of the run
+recipe. It runs one forecast per timestamp, each rounded down to a 00/06/12/18 UTC cycle.
 
 ## 6. How it works / design notes
 
-- Recipes only exchange data through the folders. The forecast folder's `manifest.json` records the
+- The two recipes only exchange data through the forecast folder. Its `manifest.json` records the
   model, the source, the init time, the step length, the **output variable order** and the step files.
   The extract recipe reads everything from the manifest and assumes no model.
 - Only `u10m,v10m` are requested by default. All channels come to about 300 MB per step.
-- Initial conditions are cached by `{source}/{model_id}/{time}`, and the shape is checked
-  (`(1, 1, n_channels, 721, 1440)`, float32) before anything is sent to the NIM.
+- NIM health is checked before anything is downloaded.
+- Initial conditions are cached by `{source}/{model_id}/{time}` and reused on reruns. Their shape is
+  checked (`(1, 1, n_channels, 721, 1440)`, float32) before they are cached or sent to the NIM.
 - If the NIM stream breaks, the steps received so far are kept and the manifest says
   `status: "partial"`. Unless *Fail on partial forecast* is checked, the run recipe then succeeds with a
   warning (if at least one step arrived). The extract recipe uses partial runs and logs a warning.
@@ -120,19 +119,13 @@ recipe. Each timestamp is rounded down to a 00/06/12/18 UTC cycle.
 
 | Symptom | Cause | What to do |
 |---|---|---|
-| `size of tensor a (73) must match ... (72)` in NIM logs; the recipe reports a broken stream | Input variable list doesn't match the model version | Use the same preset (model) for fetch and run. The plugin checks the shape before sending; re-fetch if you changed models |
-| `CUDA out of memory` in NIM logs | 2.0.0 on a 48 GB GPU | Use 1.1.0 on L40S, or an 80 GB GPU. Set GPU memory in the preset and run the preflight macro |
+| `size of tensor a (73) must match ... (72)` in NIM logs; the recipe reports a broken stream | Input variable list doesn't match the model version | Check the preset's model matches the deployed NIM image. The plugin checks the input shape against the preset's model before sending |
+| `CUDA out of memory` in NIM logs | 2.0.0 on a 48 GB GPU | Use 1.1.0 on L40S, or an 80 GB GPU |
 | NIM Operator `NIMCache`: `no profiles are selected for caching` | The operator can't read profiles for non-LLM NIMs | Deploy `NIMService` with a plain PVC, no `NIMCache` |
-| Hosted API returns `{"message":"Large asset written"}` | The hosted handoff of large outputs is broken | Plugin raises *HostedLargeAssetError*. Lower simulation length / variables, or self-host |
 | HTTP 400/500 on `/v1/infer` | Time format or array shape | The plugin sends RFC 3339 without fractional seconds and validates the shape. Check the NIM logs |
 | Slow or very large responses | ~300 MB per step with all 73 channels | Keep `variables=u10m,v10m`; use the region cell limit |
 | Pod fails at startup | Shared memory too small | `sharedMemorySizeLimit` ≥ 4 GiB |
 | "The NIM stream broke after N step(s)" | Server-side failure after HTTP 200, or an idle timeout on a proxy | Check the NIM pod logs; use the in-cluster service URL |
-
-The **NVIDIA hosted API** deployment is *experimental*. It uploads the input as an NVCF asset, then
-calls `https://climate.api.nvidia.com/v1/nvidia/fourcastnet` and polls for the result. The request body
-(`input_id`, `input_time`, `variables`, `simulation_length`, `ensemble_size`, `noise_amplitude`) has only
-been tested against fakes, not the live service.
 
 ## Development
 

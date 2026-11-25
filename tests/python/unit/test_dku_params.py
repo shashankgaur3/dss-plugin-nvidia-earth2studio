@@ -22,20 +22,18 @@ def params(monkeypatch):
     return p
 
 
-PRESET = {"connection": {"deployment": "self_hosted", "base_url": " http://nim:8000/ ", "model_id": "fourcastnet-2.0.0",
-                         "timeout_seconds": 600.0, "gpu_memory_gb": 48}}
+PRESET = {"connection": {"base_url": " http://nim:8000/ ", "model_id": "fourcastnet-2.0.0",
+                         "timeout_seconds": 600.0}}
 
 
 def test_connection_and_client(params):
     conn = params.connection_from_config(PRESET)
-    assert (conn.base_url, conn.model_id, conn.timeout_seconds, conn.gpu_memory_gb) == ("http://nim:8000/", "fourcastnet-2.0.0", 600, 48.0)
+    assert (conn.base_url, conn.model_id, conn.timeout_seconds) == ("http://nim:8000/", "fourcastnet-2.0.0", 600)
     model = params.build_model(conn)
     client = params.build_client(conn, model)
     assert client.base_url == "http://nim:8000" and client.supports_variables_param == "true"
     with pytest.raises(ConfigError, match="preset"):
         params.connection_from_config({})
-    hosted = params.connection_from_config({"connection": {"deployment": "nvcf_hosted", "api_key": "k"}})
-    assert type(params.build_client(hosted)).__name__ == "NvcfHostedClient"
 
 
 def test_parse_list(params):
@@ -64,8 +62,6 @@ def test_extract_options(params):
     assert o.bbox.lon_min == -1 and o.variables == ["u10m"] and o.layout == "wide"
     with pytest.raises(ConfigError, match="lat_min"):
         params.extract_options({"mode": "region"})
-    with pytest.raises(ConfigError, match="Unknown derived"):
-        params.extract_options({"derived": ["x"]})
 
 
 def test_sites_frame(params):

@@ -1,7 +1,6 @@
 """Storage abstraction used by all core code (local filesystem in tests, DSS folders in recipes)."""
 from __future__ import annotations
 
-import json
 from abc import ABC, abstractmethod
 
 
@@ -24,8 +23,25 @@ class Storage(ABC):
     def list(self, prefix: str = "") -> list[str]:
         """Return normalized paths (no leading slash) starting with ``prefix``."""
 
-    def read_json(self, path: str):
-        return json.loads(self.read_bytes(path).decode("utf-8"))
 
-    def write_json(self, path: str, obj) -> None:
-        self.write_bytes(path, json.dumps(obj, indent=2).encode("utf-8"))
+class PrefixedStorage(Storage):
+    """View of another storage restricted to a sub-folder (paths are relative to it)."""
+
+    def __init__(self, inner: Storage, prefix: str):
+        self.inner = inner
+        self.prefix = normalize_path(prefix).rstrip("/") + "/"
+
+    def _full(self, path: str) -> str:
+        return self.prefix + normalize_path(path)
+
+    def exists(self, path: str) -> bool:
+        return self.inner.exists(self._full(path))
+
+    def read_bytes(self, path: str) -> bytes:
+        return self.inner.read_bytes(self._full(path))
+
+    def write_bytes(self, path: str, data: bytes) -> None:
+        self.inner.write_bytes(self._full(path), data)
+
+    def list(self, prefix: str = "") -> list[str]:
+        return [p[len(self.prefix):] for p in self.inner.list(self._full(prefix))]

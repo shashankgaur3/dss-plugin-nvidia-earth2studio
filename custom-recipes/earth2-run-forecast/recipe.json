@@ -1,29 +1,36 @@
 {
     "meta": {
         "label": "Earth-2: run forecast",
-        "description": "Send an initial condition to the FourCastNet NIM and store the forecast steps and a manifest in a managed folder.",
+        "description": "Download the initial atmospheric state (ERA5 or GFS) for the selected model, send it to the FourCastNet NIM, and store the forecast steps and a manifest in a managed folder.",
         "icon": "icon-play"
     },
     "kind": "PYTHON",
-    "selectableFromFolder": "initial_conditions",
     "inputRoles": [
         {
-            "name": "initial_conditions",
-            "label": "Initial conditions folder",
-            "description": "Output of the 'fetch initial conditions' recipe",
+            "name": "dates",
+            "label": "Init times (optional)",
+            "description": "Dataset with a timestamp column, for batch backfills: one forecast per timestamp. Overrides the init time mode.",
             "arity": "UNARY",
-            "required": true,
-            "acceptsDataset": false,
-            "acceptsManagedFolder": true
+            "required": false,
+            "acceptsDataset": true
         }
     ],
     "outputRoles": [
         {
             "name": "forecast",
             "label": "Forecast folder",
-            "description": "Receives runs/init=<time>/manifest.json and steps/*.npy",
+            "description": "Receives runs/init=<time>/manifest.json and steps/*.npy (and inputs/ when no initial conditions folder is connected)",
             "arity": "UNARY",
             "required": true,
+            "acceptsDataset": false,
+            "acceptsManagedFolder": true
+        },
+        {
+            "name": "initial_conditions",
+            "label": "Initial conditions folder (optional)",
+            "description": "Where downloaded initial conditions are cached ({source}/{model_id}/{YYYYmmddTHH}.npy). If not connected, they go under inputs/ in the forecast folder.",
+            "arity": "UNARY",
+            "required": false,
             "acceptsDataset": false,
             "acceptsManagedFolder": true
         }
@@ -37,10 +44,65 @@
             "mandatory": true
         },
         {
+            "name": "sep_input",
+            "label": "Initial conditions",
+            "type": "SEPARATOR"
+        },
+        {
+            "name": "source",
+            "label": "Data source",
+            "type": "SELECT",
+            "defaultValue": "era5_arco",
+            "selectChoices": [
+                {"value": "era5_arco", "label": "ERA5 reanalysis (ARCO, historical, ~5 days lag)"},
+                {"value": "gfs", "label": "NOAA GFS analysis (near real time)"}
+            ]
+        },
+        {
+            "name": "gfs_safety_margin_hours",
+            "label": "GFS safety margin (h)",
+            "type": "INT",
+            "defaultValue": 6,
+            "description": "How far behind now the latest GFS cycle is assumed to be published",
+            "visibilityCondition": "model.source == 'gfs'"
+        },
+        {
+            "name": "time_mode",
+            "label": "Init time",
+            "type": "SELECT",
+            "defaultValue": "fixed",
+            "description": "Ignored when an init times dataset is connected",
+            "selectChoices": [
+                {"value": "fixed", "label": "Fixed"},
+                {"value": "latest_available", "label": "Latest available"},
+                {"value": "project_variable", "label": "From a project variable"}
+            ]
+        },
+        {
             "name": "init_time",
             "label": "Init time (UTC)",
             "type": "STRING",
-            "description": "Leave empty to use the latest initial condition present in the input folder"
+            "defaultValue": "2023-01-01T00:00:00Z",
+            "description": "Rounded down to 00/06/12/18 UTC",
+            "visibilityCondition": "model.time_mode == 'fixed'"
+        },
+        {
+            "name": "project_variable_name",
+            "label": "Project variable",
+            "type": "STRING",
+            "visibilityCondition": "model.time_mode == 'project_variable'"
+        },
+        {
+            "name": "dates_column",
+            "label": "Init time column",
+            "type": "COLUMN",
+            "columnRole": "dates",
+            "description": "Only used when an init times dataset is connected"
+        },
+        {
+            "name": "sep_forecast",
+            "label": "Forecast",
+            "type": "SEPARATOR"
         },
         {
             "name": "simulation_length",

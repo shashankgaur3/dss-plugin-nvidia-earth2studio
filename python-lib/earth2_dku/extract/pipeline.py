@@ -10,7 +10,7 @@ from ..errors import ConfigError, ManifestError
 from ..forecast.manifest import list_manifests
 from ..times import parse_time
 from .derived import add_derived, required_inputs
-from .points import METHODS, extract_points
+from .points import extract_points
 from .reader import KEY_COLUMNS, resolve_variables
 from .region import DEFAULT_MAX_CELLS, BBox, extract_region
 
@@ -75,15 +75,12 @@ def _extract_one(manifest, storage, options: ExtractOptions, sites_df):
     for r in required_inputs(options.derived):
         if r not in to_extract:
             to_extract.append(r)
-    to_extract = resolve_variables(manifest, to_extract)
     if options.mode == "points":
         if sites_df is None:
             raise ConfigError(
                 "Point mode needs a 'sites' input dataset (site_id, latitude, longitude). "
                 "Add one (e.g. the plugin's sample_sites.csv), or switch to region mode."
             )
-        if options.interpolation not in METHODS:
-            raise ConfigError(f"Unknown interpolation '{options.interpolation}'. Use one of {METHODS}.")
         wide = extract_points(manifest, storage, sites_df, to_extract, options.interpolation)
     elif options.mode == "region":
         if options.bbox is None:

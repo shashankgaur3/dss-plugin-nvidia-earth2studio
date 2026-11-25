@@ -41,19 +41,5 @@ class NimStreamBrokenError(Earth2Error):
         super().__init__(msg)
 
 
-class HostedLargeAssetError(Earth2Error):
-    """The NVIDIA hosted API answered 'Large asset written' without a retrievable result."""
-
-    def __init__(self, detail: str = ""):
-        msg = (
-            "The NVIDIA hosted API reported 'Large asset written' but the result cannot be "
-            "retrieved (known issue with large hosted outputs"
-            + (f"; {detail}" if detail else "")
-            + "). Reduce simulation_length and/or the number of requested variables, "
-            "or use a self-hosted FourCastNet NIM."
-        )
-        super().__init__(msg)
-
-
 class ManifestError(Earth2Error):
     """A forecast run manifest is missing, corrupt or inconsistent with its step files."""

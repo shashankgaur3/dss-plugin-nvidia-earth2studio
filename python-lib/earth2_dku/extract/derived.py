@@ -15,15 +15,14 @@ class DerivedVariable:
     name: str
     requires: tuple
     func: Callable
-    description: str = ""
 
 
 _REGISTRY: dict[str, DerivedVariable] = {}
 
 
-def derived(name: str, requires, description: str = ""):
+def derived(name: str, requires):
     def decorator(func):
-        _REGISTRY[name] = DerivedVariable(name, tuple(requires), func, description)
+        _REGISTRY[name] = DerivedVariable(name, tuple(requires), func)
         return func
 
     return decorator
@@ -61,16 +60,16 @@ def add_derived(wide: pd.DataFrame, names) -> pd.DataFrame:
     return wide
 
 
-@derived("wind_speed_10m", requires=["u10m", "v10m"], description="10 m wind speed (m/s)")
+@derived("wind_speed_10m", requires=["u10m", "v10m"])  # m/s
 def _wind_speed_10m(u, v):
     return np.hypot(u, v)
 
 
-@derived("wind_speed_100m", requires=["u100m", "v100m"], description="100 m wind speed (m/s)")
+@derived("wind_speed_100m", requires=["u100m", "v100m"])  # m/s
 def _wind_speed_100m(u, v):
     return np.hypot(u, v)
 
 
-@derived("t2m_celsius", requires=["t2m"], description="2 m temperature (deg C)")
+@derived("t2m_celsius", requires=["t2m"])  # deg C
 def _t2m_celsius(t2m):
     return t2m - 273.15

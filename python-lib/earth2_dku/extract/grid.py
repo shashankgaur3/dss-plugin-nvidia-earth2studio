@@ -76,12 +76,12 @@ def to_display_lon(lon):
     return np.mod(np.asarray(lon, dtype="float64") + 180.0, 360.0) - 180.0
 
 
-def validate_lat_lon(lat, lon, what="site"):
+def validate_lat_lon(lat, lon):
     lat = np.asarray(lat, dtype="float64")
     lon = np.asarray(lon, dtype="float64")
     if np.isnan(lat).any() or np.isnan(lon).any():
-        raise ConfigError(f"Some {what} latitudes/longitudes are empty. Fill or remove those rows.")
+        raise ConfigError("Some site latitudes/longitudes are empty. Fill or remove those rows.")
     if (np.abs(lat) > 90).any():
-        raise ConfigError(f"{what.capitalize()} latitudes must be within [-90, 90].")
+        raise ConfigError("Site latitudes must be within [-90, 90].")
     if ((lon < -180) | (lon > 360)).any():
-        raise ConfigError(f"{what.capitalize()} longitudes must be within [-180, 360].")
+        raise ConfigError("Site longitudes must be within [-180, 360].")

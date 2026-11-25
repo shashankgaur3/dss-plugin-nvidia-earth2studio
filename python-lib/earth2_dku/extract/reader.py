@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import Iterator
 
 import numpy as np
+import pandas as pd
 
 from ..arrays import load_npy
 from ..errors import ConfigError, ManifestError
@@ -63,3 +64,18 @@ def step_keys(manifest, step) -> dict:
         "model_id": manifest.model_id,
         "source": manifest.source,
     }
+
+
+def extract_table(manifest, storage, variables, cells: pd.DataFrame, sample) -> pd.DataFrame:
+    """Wide table: one row per (step, cell), KEY_COLUMNS + one column per variable.
+
+    ``cells`` has site_id/latitude/longitude; ``sample(field2d)`` returns one value per cell.
+    """
+    variables = resolve_variables(manifest, variables)
+    frames = [
+        cells.assign(**step_keys(manifest, step), **{v: sample(fields[v]) for v in variables})
+        for step, fields in iter_step_fields(manifest, storage, variables)
+    ]
+    if not frames:
+        return pd.DataFrame(columns=KEY_COLUMNS + variables)
+    return pd.concat(frames, ignore_index=True)[KEY_COLUMNS + variables]

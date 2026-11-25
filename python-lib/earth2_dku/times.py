@@ -62,10 +62,5 @@ def floor_to_cycle(dt: datetime, hours: int = CYCLE_HOURS) -> datetime:
     return dt - timedelta(hours=dt.hour % hours)
 
 
-def is_on_cycle(dt: datetime, hours: int = CYCLE_HOURS) -> bool:
-    dt = parse_time(dt)
-    return dt == floor_to_cycle(dt, hours)
-
-
 def utcnow() -> datetime:
     return datetime.now(UTC)

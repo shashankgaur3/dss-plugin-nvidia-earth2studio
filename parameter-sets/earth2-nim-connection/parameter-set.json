@@ -1,7 +1,7 @@
 {
     "meta": {
         "label": "Earth-2 FourCastNet NIM connection",
-        "description": "Connection to an NVIDIA Earth-2 FourCastNet NIM (self-hosted, or the NVIDIA hosted API) and the model version it serves.",
+        "description": "Connection to a locally deployed NVIDIA Earth-2 FourCastNet NIM and the model version it serves.",
         "icon": "icon-cloud"
     },
     "defaultDefinableInline": true,
@@ -9,29 +9,11 @@
     "pluginParams": [],
     "params": [
         {
-            "name": "deployment",
-            "label": "Deployment",
-            "type": "SELECT",
-            "defaultValue": "self_hosted",
-            "mandatory": true,
-            "selectChoices": [
-                {"value": "self_hosted", "label": "Self-hosted NIM"},
-                {"value": "nvcf_hosted", "label": "NVIDIA hosted API (experimental)"}
-            ]
-        },
-        {
             "name": "base_url",
             "label": "NIM base URL",
             "type": "STRING",
             "description": "e.g. http://fourcastnet.nim-services.svc.cluster.local:8000 (prefer the in-cluster service URL; load balancer idle timeouts break long streams)",
-            "visibilityCondition": "model.deployment == 'self_hosted'"
-        },
-        {
-            "name": "api_key",
-            "label": "NVIDIA API key",
-            "type": "PASSWORD",
-            "description": "API key for the NVIDIA hosted API (build.nvidia.com)",
-            "visibilityCondition": "model.deployment == 'nvcf_hosted'"
+            "mandatory": true
         },
         {
             "name": "model_id",
@@ -51,13 +33,6 @@
             "type": "INT",
             "defaultValue": 1200,
             "description": "Read timeout for inference requests"
-        },
-        {
-            "name": "gpu_memory_gb",
-            "label": "GPU memory (GB)",
-            "type": "INT",
-            "mandatory": false,
-            "description": "Optional. Memory of the single GPU running the NIM, used by the preflight check (e.g. 48 for an L40S, 80 for an H100)"
         }
     ]
 }

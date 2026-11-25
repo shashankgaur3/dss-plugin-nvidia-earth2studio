@@ -19,14 +19,13 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT_SECONDS = 1200
 CONNECT_TIMEOUT_SECONDS = 30
 
+# Broken/truncated streams: requests and urllib3 errors (ChunkedEncodingError, ProtocolError,
+# ReadTimeoutError...), http.client.IncompleteRead, and tarfile.ReadError on a cut archive.
 _STREAM_ERRORS = (
-    requests.exceptions.ChunkedEncodingError,
-    requests.exceptions.ConnectionError,
-    urllib3.exceptions.ProtocolError,
-    urllib3.exceptions.ReadTimeoutError,
+    requests.RequestException,
     urllib3.exceptions.HTTPError,
-    http.client.IncompleteRead,
-    tarfile.TarError,  # includes tarfile.ReadError
+    http.client.HTTPException,
+    tarfile.TarError,
     EOFError,
 )
 

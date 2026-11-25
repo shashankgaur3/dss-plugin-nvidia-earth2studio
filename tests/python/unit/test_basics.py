@@ -4,7 +4,7 @@ import types
 import numpy as np
 import pytest
 
-from earth2_dku.arrays import load_npy, npy_bytes, read_npy_header
+from earth2_dku.arrays import load_npy, npy_bytes
 from earth2_dku.errors import ConfigError, NimStreamBrokenError
 from earth2_dku.models.registry import get_model, list_models, load_registry
 from earth2_dku.times import floor_to_cycle, parse_time, to_rfc3339
@@ -44,11 +44,9 @@ def test_floor_to_cycle():
 
 
 # ------------------------------------------------------------------------ arrays
-def test_npy_roundtrip_and_header():
+def test_npy_roundtrip():
     arr = np.arange(24, dtype="float32").reshape(1, 2, 3, 4)
-    data = npy_bytes(arr)
-    assert read_npy_header(data) == ((1, 2, 3, 4), np.dtype("float32"))
-    np.testing.assert_array_equal(load_npy(data), arr)
+    np.testing.assert_array_equal(load_npy(npy_bytes(arr)), arr)
 
 
 # ---------------------------------------------------------------------- storage
@@ -57,10 +55,20 @@ def test_local_storage(storage):
     assert storage.exists("a/b.bin") and storage.exists("/a/b.bin")
     assert not storage.exists("a/c.bin")
     assert storage.read_bytes("a/b.bin") == b"x"
-    storage.write_json("a/m.json", {"k": 1})
-    assert storage.read_json("/a/m.json") == {"k": 1}
+    storage.write_bytes("a/m.json", b"{}")
     assert storage.list("a/") == ["a/b.bin", "a/m.json"]
     assert storage.list("/a/b") == ["a/b.bin"]
+
+
+def test_prefixed_storage(storage):
+    from earth2_dku.storage.base import PrefixedStorage
+
+    view = PrefixedStorage(storage, "/inputs")
+    view.write_bytes("era5/x.npy", b"1")
+    storage.write_bytes("runs/m.json", b"2")
+    assert storage.exists("inputs/era5/x.npy") and view.exists("/era5/x.npy")
+    assert view.read_bytes("era5/x.npy") == b"1"
+    assert view.list() == ["era5/x.npy"] and view.list("era5/") == ["era5/x.npy"]
 
 
 def test_local_storage_blocks_escape(storage):
