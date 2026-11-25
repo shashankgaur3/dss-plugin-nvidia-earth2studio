@@ -23,9 +23,8 @@ Supported models (see `python-lib/earth2_dku/models/models.yaml`):
 - A locally deployed FourCastNet NIM that DSS can reach over HTTP.
 - NVIDIA AI Enterprise licensing for self-hosted NIMs.
 - Outbound access from DSS to ERA5 (ARCO Zarr store on Google Cloud Storage) and/or NOAA GFS (AWS S3).
-- A Python **3.11** code environment for the plugin. The code env installs Earth2Studio, which pulls in
-  PyTorch, so it is large. Recent Earth2Studio releases (1.0+) require Python ≥ 3.11. On 3.10, pip picks
-  an older Earth2Studio release, which may not provide FourCastNet 3 (`fourcastnet-2.0.0`).
+- A Python **3.11** or **3.12** code environment for the plugin. The code env installs Earth2Studio,
+  which pulls in PyTorch, so it is large.
 
 ## 2. GPU guidance
 
@@ -46,7 +45,10 @@ Supported models (see `python-lib/earth2_dku/models/models.yaml`):
 ## 4. Quickstart
 
 1. **Preset.** In *Plugins → NVIDIA Earth-2 FourCastNet → Settings*, create an *Earth-2 FourCastNet NIM
-   connection* preset with your NIM base URL and model `fourcastnet-1.1.0`.
+   connection* preset with your NIM base URL and model `fourcastnet-1.1.0`. If the endpoint is
+   protected by an API key (e.g. a NIM exposed through a gateway such as
+   `https://<host>/v1/...` with `X-API-Key: <key>`), set *API key*, and *API key header* if your
+   gateway uses a header other than `X-API-Key`. The key is sent with every request to the NIM.
 2. **Run.** Add the *Earth-2: run forecast* recipe with a new output folder `forecast`, and select:
    - the preset
    - source *ERA5*, time mode *Fixed*, init time `2023-01-01T00:00:00Z`
@@ -125,6 +127,7 @@ recipe. It runs one forecast per timestamp, each rounded down to a 00/06/12/18 U
 | HTTP 400/500 on `/v1/infer` | Time format or array shape | The plugin sends RFC 3339 without fractional seconds and validates the shape. Check the NIM logs |
 | Slow or very large responses | ~300 MB per step with all 73 channels | Keep `variables=u10m,v10m`; use the region cell limit |
 | Pod fails at startup | Shared memory too small | `sharedMemorySizeLimit` ≥ 4 GiB |
+| Health check returns HTTP 401/403 | The endpoint requires an API key | Set *API key* (and *API key header*) in the preset |
 | "The NIM stream broke after N step(s)" | Server-side failure after HTTP 200, or an idle timeout on a proxy | Check the NIM pod logs; use the in-cluster service URL |
 
 ## Development
@@ -137,7 +140,8 @@ tests/python/live/       NIM / ERA5 / GFS integration tests (markers `nim`, `net
 
 - `make unit-tests` runs the unit tests in a fresh venv.
 - `EARTH2_NIM_URL=http://host:8000 make live-tests` runs the live tests. These need the full code env.
-  Optionally, set `EARTH2_MODEL_ID` and `EARTH2_INPUT_NPY` (a pre-fetched initial condition) to skip the
+  For a protected endpoint, also set `EARTH2_NIM_API_KEY` (and `EARTH2_NIM_API_KEY_HEADER` if not
+  `X-API-Key`). Optionally, set `EARTH2_MODEL_ID` and `EARTH2_INPUT_NPY` (a pre-fetched initial condition) to skip the
   ERA5 download.
 - `make plugin` builds the zip for *Plugins → Add plugin → Upload*.
 

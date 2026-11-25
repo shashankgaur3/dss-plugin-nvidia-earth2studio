@@ -16,6 +16,20 @@
             "mandatory": true
         },
         {
+            "name": "api_key",
+            "label": "API key",
+            "type": "PASSWORD",
+            "mandatory": false,
+            "description": "Optional. Only if the NIM endpoint is protected (e.g. behind an API gateway). Leave empty for no authentication"
+        },
+        {
+            "name": "api_key_header",
+            "label": "API key header",
+            "type": "STRING",
+            "defaultValue": "X-API-Key",
+            "description": "HTTP header that carries the API key (e.g. X-API-Key)"
+        },
+        {
             "name": "model_id",
             "label": "Model",
             "type": "SELECT",

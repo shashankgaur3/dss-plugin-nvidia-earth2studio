@@ -1,26 +1,12 @@
 """Time parsing/formatting helpers. All datetimes handled by the plugin are UTC-aware."""
 from __future__ import annotations
 
-import re
 from datetime import datetime, timedelta, timezone
 
 from .errors import ConfigError
 
 UTC = timezone.utc
 CYCLE_HOURS = 6
-
-_FORMATS = (
-    "%Y-%m-%dT%H:%M:%SZ",
-    "%Y-%m-%dT%H:%M:%S",
-    "%Y-%m-%dT%H:%M",
-    "%Y-%m-%dT%H",
-    "%Y-%m-%d %H:%M:%S",
-    "%Y-%m-%d %H:%M",
-    "%Y-%m-%d %H",
-    "%Y-%m-%d",
-    "%Y%m%dT%H",
-)
-
 
 def parse_time(value) -> datetime:
     """Parse a datetime or string into a UTC-aware datetime. Naive values are taken as UTC."""
@@ -30,22 +16,12 @@ def parse_time(value) -> datetime:
         text = "" if value is None else str(value).strip()
         if not text:
             raise ConfigError("An init time is required. Use a format like 2023-01-01T00:00:00Z.")
-        dt = None
-        # Python 3.10's fromisoformat only accepts 3 or 6 fractional digits and no "Z".
-        iso = re.sub(r"\.(\d+)", lambda m: "." + m.group(1)[:6].ljust(6, "0"), text.replace("Z", "+00:00"))
         try:
-            dt = datetime.fromisoformat(iso)
+            dt = datetime.fromisoformat(text)  # Python 3.11+: accepts "Z", "2023-01-01T00", "20230101T00", ...
         except ValueError:
-            for fmt in _FORMATS:
-                try:
-                    dt = datetime.strptime(text, fmt)
-                    break
-                except ValueError:
-                    continue
-        if dt is None:
             raise ConfigError(
                 f"Cannot parse time '{text}'. Use a format like 2023-01-01T00:00:00Z or 2023-01-01T00."
-            )
+            ) from None
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
     return dt.astimezone(UTC)

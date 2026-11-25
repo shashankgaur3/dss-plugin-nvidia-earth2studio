@@ -78,7 +78,9 @@ class SelfHostedNimClient(NimClient):
         supports_variables_param: str = "unverified",
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         session: requests.Session | None = None,
+        auth_header: tuple[str, str] | None = None,
     ):
+        """``auth_header``: optional (name, value) sent with every request, e.g. ("X-API-Key", "...")."""
         if not base_url or not str(base_url).strip():
             raise ConfigError(
                 "The NIM base URL is empty. Set it in the connection preset, e.g. "
@@ -88,6 +90,8 @@ class SelfHostedNimClient(NimClient):
         self.supports_variables_param = supports_variables_param
         self.timeout_seconds = float(timeout_seconds or DEFAULT_TIMEOUT_SECONDS)
         self.session = session or requests.Session()
+        if auth_header:
+            self.session.headers[auth_header[0]] = auth_header[1]
         self.last_variables_sent = None
 
     # ------------------------------------------------------------------ health
@@ -102,6 +106,12 @@ class SelfHostedNimClient(NimClient):
             )
         if resp.status_code == 200:
             return HealthStatus(True, f"{url} returned 200: NIM is ready.")
+        if resp.status_code in (401, 403):
+            return HealthStatus(
+                False,
+                f"{url} returned HTTP {resp.status_code}: the NIM requires authentication. Check the API key "
+                "header name and value in the connection preset.",
+            )
         return HealthStatus(
             False,
             f"{url} returned HTTP {resp.status_code}. The NIM may still be loading the model; "

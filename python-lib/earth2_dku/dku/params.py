@@ -18,6 +18,7 @@ from ..times import floor_to_cycle, parse_time
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 1200
+DEFAULT_AUTH_HEADER = "X-API-Key"
 
 
 @dataclass
@@ -25,6 +26,7 @@ class ConnectionConfig:
     base_url: str = ""
     model_id: str = "fourcastnet-1.1.0"
     timeout_seconds: int = DEFAULT_TIMEOUT
+    auth_header: tuple[str, str] | None = None  # (header name, API key), None = no authentication
 
 
 def _blank(v) -> bool:
@@ -48,10 +50,13 @@ def connection_from_config(config: dict, key: str = "connection") -> ConnectionC
     preset = (config or {}).get(key)
     if not isinstance(preset, dict) or not preset:
         raise ConfigError("Select an 'Earth-2 FourCastNet NIM connection' preset in the settings.")
+    api_key = (preset.get("api_key") or "").strip()
+    header = (preset.get("api_key_header") or "").strip() or DEFAULT_AUTH_HEADER
     return ConnectionConfig(
         base_url=(preset.get("base_url") or "").strip(),
         model_id=preset.get("model_id") or "fourcastnet-1.1.0",
         timeout_seconds=as_int(preset.get("timeout_seconds"), DEFAULT_TIMEOUT),
+        auth_header=(header, api_key) if api_key else None,
     )
 
 
@@ -63,7 +68,8 @@ def build_client(conn: ConnectionConfig, model):
     from ..clients.self_hosted import SelfHostedNimClient
 
     return SelfHostedNimClient(
-        conn.base_url, supports_variables_param=model.supports_variables_param, timeout_seconds=conn.timeout_seconds
+        conn.base_url, supports_variables_param=model.supports_variables_param,
+        timeout_seconds=conn.timeout_seconds, auth_header=conn.auth_header,
     )
 
 

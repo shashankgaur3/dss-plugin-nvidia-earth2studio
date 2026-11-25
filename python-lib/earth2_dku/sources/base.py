@@ -24,7 +24,7 @@ def validate_state_array(arr: np.ndarray, model) -> None:
 def earth2studio_missing(exc: Exception) -> ConfigError:
     return ConfigError(
         f"Earth2Studio is required to fetch initial conditions but could not be imported ({exc}). "
-        "Rebuild the plugin code environment (earth2studio>=0.3.0, Python 3.10/3.11)."
+        "Rebuild the plugin code environment (earth2studio>=0.3.0, Python 3.11/3.12)."
     )
 
 

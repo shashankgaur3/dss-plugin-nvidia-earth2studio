@@ -32,8 +32,19 @@ def test_connection_and_client(params):
     model = params.build_model(conn)
     client = params.build_client(conn, model)
     assert client.base_url == "http://nim:8000" and client.supports_variables_param == "true"
+    assert conn.auth_header is None and "X-API-Key" not in client.session.headers
     with pytest.raises(ConfigError, match="preset"):
         params.connection_from_config({})
+
+
+def test_api_key_header(params):
+    model = params.get_model("fourcastnet-1.1.0")
+    conn = params.connection_from_config({"connection": {"base_url": "http://nim", "api_key": " k1 "}})
+    assert conn.auth_header == ("X-API-Key", "k1")
+    assert params.build_client(conn, model).session.headers["X-API-Key"] == "k1"
+    conn = params.connection_from_config({"connection": {"base_url": "http://nim", "api_key": "k2",
+                                                         "api_key_header": "Authorization-Token"}})
+    assert conn.auth_header == ("Authorization-Token", "k2")
 
 
 def test_parse_list(params):

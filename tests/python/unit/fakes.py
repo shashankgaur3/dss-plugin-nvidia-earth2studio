@@ -85,16 +85,18 @@ class FakeNimServer:
 
     break_after=k: send k complete members, then half of the next one, then drop the connection.
     reject_variables: answer 400 mentioning `variables` when the field is sent.
+    required_header: (name, value) every request must carry, else 401.
     """
 
     def __init__(self, files, break_after=None, reject_variables=False, infer_status=200, health_status=200,
-                 chunk_size=16 * 1024):
+                 chunk_size=16 * 1024, required_header=None):
         self.files = list(files)
         self.break_after = break_after
         self.reject_variables = reject_variables
         self.infer_status = infer_status
         self.health_status = health_status
         self.chunk_size = chunk_size
+        self.required_header = required_header
         self.requests: list[dict] = []
         self._server = None
 
@@ -107,7 +109,18 @@ class FakeNimServer:
             def log_message(self, *args):
                 pass
 
+            def _unauthorized(self):
+                need = fake.required_header
+                if need and self.headers.get(need[0]) != need[1]:
+                    if self.command == "POST":
+                        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                    self._plain(401, b'{"detail": "unauthorized"}')
+                    return True
+                return False
+
             def do_GET(self):
+                if self._unauthorized():
+                    return
                 body = b"ok" if fake.health_status == 200 else b"not ready"
                 self.send_response(fake.health_status)
                 self.send_header("Content-Length", str(len(body)))
@@ -115,6 +128,8 @@ class FakeNimServer:
                 self.wfile.write(body)
 
             def do_POST(self):
+                if self._unauthorized():
+                    return
                 length = int(self.headers.get("Content-Length", 0))
                 raw = self.rfile.read(length)
                 msg = email.message_from_bytes(

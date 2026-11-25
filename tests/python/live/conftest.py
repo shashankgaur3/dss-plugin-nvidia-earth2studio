@@ -6,6 +6,8 @@
 Env vars:
     EARTH2_NIM_URL      base URL of the NIM (required for `nim` tests)
     EARTH2_MODEL_ID     registry model id served by the NIM (default fourcastnet-1.1.0)
+    EARTH2_NIM_API_KEY  optional API key for a protected NIM endpoint
+    EARTH2_NIM_API_KEY_HEADER  header carrying the key (default X-API-Key)
     EARTH2_INPUT_NPY    optional pre-fetched initial condition (.npy); otherwise ERA5 2023-01-01T00 is
                         fetched with Earth2Studio (needs network)
 """
@@ -42,7 +44,9 @@ def model():
 def client(model):
     from earth2_dku.clients.self_hosted import SelfHostedNimClient
 
-    return SelfHostedNimClient(os.environ["EARTH2_NIM_URL"], model.supports_variables_param)
+    key = os.environ.get("EARTH2_NIM_API_KEY")
+    auth = (os.environ.get("EARTH2_NIM_API_KEY_HEADER", "X-API-Key"), key) if key else None
+    return SelfHostedNimClient(os.environ["EARTH2_NIM_URL"], model.supports_variables_param, auth_header=auth)
 
 
 @pytest.fixture(scope="session")

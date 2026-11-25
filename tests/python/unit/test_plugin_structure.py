@@ -25,7 +25,7 @@ def test_plugin_json(plugin_root):
 
 def test_code_env(plugin_root):
     desc = _json(plugin_root / "code-env/python/desc.json")
-    assert desc["acceptedPythonInterpreters"] == ["PYTHON311", "PYTHON310"]
+    assert desc["acceptedPythonInterpreters"] == ["PYTHON311", "PYTHON312"]
     reqs = (plugin_root / "code-env/python/spec/requirements.txt").read_text()
     assert "earth2studio>=0.3.0" in reqs
 
@@ -43,8 +43,9 @@ def test_all_component_json_parse(plugin_root):
 def test_preset_model_choices_match_registry(plugin_root):
     preset = _json(plugin_root / "parameter-sets/earth2-nim-connection/parameter-set.json")
     params = {p["name"]: p for p in preset["params"]}
-    assert set(params) == {"base_url", "model_id", "timeout_seconds"}
+    assert set(params) == {"base_url", "api_key", "api_key_header", "model_id", "timeout_seconds"}
     assert params["base_url"]["mandatory"]
+    assert params["api_key"]["type"] == "PASSWORD" and not params["api_key"]["mandatory"]
     assert [c["value"] for c in params["model_id"]["selectChoices"]] == [m.model_id for m in list_models()]
 
 

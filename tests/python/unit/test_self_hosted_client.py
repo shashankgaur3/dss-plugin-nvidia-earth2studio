@@ -105,3 +105,19 @@ def test_server_error_message():
     with FakeNimServer([], infer_status=500) as srv:
         with pytest.raises(NimRequestError, match="RFC 3339"):
             _run(SelfHostedNimClient(srv.base_url))
+
+
+def test_api_key_header_sent_on_health_and_infer():
+    auth = ("X-API-Key", "secret")
+    with FakeNimServer(small_steps(3), required_header=auth) as srv:
+        client = SelfHostedNimClient(srv.base_url, auth_header=auth)
+        assert client.health().ready
+        assert len(_run(client)) == 3
+
+
+def test_missing_or_wrong_api_key():
+    with FakeNimServer(small_steps(3), required_header=("X-API-Key", "secret")) as srv:
+        status = SelfHostedNimClient(srv.base_url).health()
+        assert not status.ready and "authentication" in status.detail
+        with pytest.raises(NimRequestError, match="HTTP 401"):
+            _run(SelfHostedNimClient(srv.base_url, auth_header=("X-API-Key", "wrong")))
