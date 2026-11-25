@@ -1,0 +1,27 @@
+# Model registry. Model-specific facts live here, not in code branches.
+# Adding a model version should only require a new entry.
+#
+# supports_variables_param: true | false | unverified
+#   Whether the NIM honours the `variables` form field on /v1/infer.
+#   `unverified`: the client sends it, and if the NIM answers 400/422 mentioning
+#   `variables`, retries once without it. Update after running the
+#   variable-order integration test (tests/python/live/test_live_nim.py).
+fourcastnet-1.1.0:
+  label: "FourCastNet v2 SFNO (NIM 1.1.0)"
+  nim_image: "nvcr.io/nim/nvidia/fourcastnet:1.1.0"
+  input_variables_from: "earth2studio.models.px.sfno:VARIABLES"
+  n_channels: 73
+  step_hours: 6
+  min_gpu_mem_gb: 40
+  supports_variables_param: unverified
+  grid: era5_0p25
+
+fourcastnet-2.0.0:
+  label: "FourCastNet 3 (NIM 2.0.0)"
+  nim_image: "nvcr.io/nim/nvidia/fourcastnet:2.0.0"
+  input_variables_from: "earth2studio.models.px.fcn3:VARIABLES"
+  n_channels: 72
+  step_hours: 6
+  min_gpu_mem_gb: 60
+  supports_variables_param: true
+  grid: era5_0p25

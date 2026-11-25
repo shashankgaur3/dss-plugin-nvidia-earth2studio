@@ -1,0 +1,91 @@
+{
+    "meta": {
+        "label": "Earth-2: fetch initial conditions",
+        "description": "Download the atmospheric state (ERA5 or GFS) that FourCastNet starts from, shaped for the selected model, into a managed folder.",
+        "icon": "icon-download-alt"
+    },
+    "kind": "PYTHON",
+    "inputRoles": [
+        {
+            "name": "dates",
+            "label": "Init times (optional)",
+            "description": "Dataset with a timestamp column, for batch backfills. Overrides the time mode.",
+            "arity": "UNARY",
+            "required": false,
+            "acceptsDataset": true
+        }
+    ],
+    "outputRoles": [
+        {
+            "name": "initial_conditions",
+            "label": "Initial conditions folder",
+            "description": "Receives {source}/{model_id}/{YYYYmmddTHH}.npy",
+            "arity": "UNARY",
+            "required": true,
+            "acceptsDataset": false,
+            "acceptsManagedFolder": true
+        }
+    ],
+    "params": [
+        {
+            "name": "connection",
+            "label": "NIM connection",
+            "type": "PRESET",
+            "parameterSetId": "earth2-nim-connection",
+            "mandatory": true,
+            "description": "Defines the model (and therefore the input variables)"
+        },
+        {
+            "name": "source",
+            "label": "Data source",
+            "type": "SELECT",
+            "defaultValue": "era5_arco",
+            "selectChoices": [
+                {"value": "era5_arco", "label": "ERA5 reanalysis (ARCO, historical, ~5 days lag)"},
+                {"value": "gfs", "label": "NOAA GFS analysis (near real time)"}
+            ]
+        },
+        {
+            "name": "gfs_safety_margin_hours",
+            "label": "GFS safety margin (h)",
+            "type": "INT",
+            "defaultValue": 6,
+            "description": "How far behind now the latest GFS cycle is assumed to be published",
+            "visibilityCondition": "model.source == 'gfs'"
+        },
+        {
+            "name": "time_mode",
+            "label": "Init time",
+            "type": "SELECT",
+            "defaultValue": "fixed",
+            "description": "Ignored when an init times dataset is connected",
+            "selectChoices": [
+                {"value": "fixed", "label": "Fixed"},
+                {"value": "latest_available", "label": "Latest available"},
+                {"value": "project_variable", "label": "From a project variable"}
+            ]
+        },
+        {
+            "name": "init_time",
+            "label": "Init time (UTC)",
+            "type": "STRING",
+            "defaultValue": "2023-01-01T00:00:00Z",
+            "description": "Rounded down to 00/06/12/18 UTC",
+            "visibilityCondition": "model.time_mode == 'fixed'"
+        },
+        {
+            "name": "project_variable_name",
+            "label": "Project variable",
+            "type": "STRING",
+            "visibilityCondition": "model.time_mode == 'project_variable'"
+        },
+        {
+            "name": "dates_column",
+            "label": "Init time column",
+            "type": "COLUMN",
+            "columnRole": "dates",
+            "description": "Only used when an init times dataset is connected"
+        }
+    ],
+    "resourceKeys": []
+}

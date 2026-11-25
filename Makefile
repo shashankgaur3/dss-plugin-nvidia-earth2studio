@@ -35,7 +35,6 @@ unit-tests:
 		source env/bin/activate; \
 		pip install --upgrade pip;\
 		pip install --no-cache-dir -r tests/python/unit/requirements.txt; \
-		pip install --no-cache-dir -r code-env/python/spec/requirements.txt; \
 		export PYTHONPATH="$(PYTHONPATH):$(PWD)/python-lib"; \
 		python3 -m pytest tests/python/unit --alluredir=tests/allure_report || ret=$$?; exit $$ret \
 	)
@@ -49,6 +48,21 @@ integration-tests:
 		pip3 install --upgrade pip;\
 		pip install --no-cache-dir -r tests/python/integration/requirements.txt; \
 		python3 -m pytest tests/python/integration --alluredir=tests/allure_report || ret=$$?; exit $$ret \
+	)
+
+# Live tests against a real FourCastNet NIM and ERA5/GFS (needs the full code env, incl. earth2studio).
+# Usage: EARTH2_NIM_URL=http://host:8000 make live-tests
+live-tests:
+	@echo "Running live NIM / network tests..."
+	@( \
+		rm -rf ./env/; \
+		python3 -m venv env/; \
+		source env/bin/activate; \
+		pip install --upgrade pip;\
+		pip install --no-cache-dir -r tests/python/unit/requirements.txt; \
+		pip install --no-cache-dir -r code-env/python/spec/requirements.txt; \
+		export PYTHONPATH="$(PYTHONPATH):$(PWD)/python-lib"; \
+		python3 -m pytest tests/python/live -v || ret=$$?; exit $$ret \
 	)
 
 tests: unit-tests integration-tests

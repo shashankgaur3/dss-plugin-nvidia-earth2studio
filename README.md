@@ -1,133 +1,152 @@
-# Plugin Template
+# NVIDIA Earth-2 FourCastNet plugin for Dataiku
 
-This repository is a template for developers to create Dataiku DSS plugins from GitHub.
+Get AI weather forecasts for your own sites as a regular Dataiku dataset. The plugin sends the
+current state of the atmosphere (ERA5 reanalysis or NOAA GFS) to an NVIDIA Earth-2 **FourCastNet NIM**,
+stores the global forecast, and extracts values (for example 10 m wind speed every 6 hours at each
+wind farm) into a table that you can join, chart, or feed to downstream models and dashboards.
 
-Use it and adapt it as you wish, and have fun with Dataiku!
+| Component | Type | What it does |
+|---|---|---|
+| Earth-2 FourCastNet NIM connection | Preset | NIM endpoint, model version, timeout and GPU size |
+| Earth-2: fetch initial conditions | Recipe | ERA5 / GFS state for the model to start from → managed folder |
+| Earth-2: run forecast | Recipe | Calls the NIM, streams forecast steps → managed folder |
+| Earth-2: extract to dataset | Recipe | Values at sites (points) or over a bounding box (region) → dataset |
+| Earth-2: preflight check | Macro | Checks the endpoint, the model, Earth2Studio, the GPU size and the init time |
 
+Supported models (see `python-lib/earth2_dku/models/models.yaml`):
 
-# How to test your plugin
+| Model id | NIM image | Input channels | Min. GPU memory |
+|---|---|---|---|
+| `fourcastnet-1.1.0` (default) | `nvcr.io/nim/nvidia/fourcastnet:1.1.0` (FourCastNet v2 SFNO) | 73 | 40 GB |
+| `fourcastnet-2.0.0` | `nvcr.io/nim/nvidia/fourcastnet:2.0.0` (FourCastNet 3) | 72 | 60 GB |
 
-We recommend supporting your development cycle with unit and integration tests.
-To operate integration tests, you will need the help of the `dataiku-plugin-tests-utils` package to automate their executions while targeting dedicated DSS instances.
+## 1. Prerequisites
 
-`dataiku-plugin-tests-utils` will be installed as a `pytest plugin`. Install that package inside an environment dedicated to integration tests; otherwise, `pytest` will complain about unused fixtures inside your unit tests.
+- A FourCastNet NIM that DSS can reach over HTTP (self-hosted), **or** an NVIDIA API key for the hosted
+  API (experimental, see [Troubleshooting](#7-troubleshooting)).
+- NVIDIA AI Enterprise licensing for self-hosted NIMs.
+- Outbound access from DSS to ERA5 (ARCO Zarr store on Google Cloud Storage) and/or NOAA GFS (AWS S3).
+- A Python **3.11** code environment for the plugin. The code env installs Earth2Studio, which pulls in
+  PyTorch, so it is large. Recent Earth2Studio releases (1.0+) require Python ≥ 3.11. On 3.10, pip picks
+  an older Earth2Studio release, which may not provide FourCastNet 3 (`fourcastnet-2.0.0`).
 
-# How to install in your plugin
+## 2. GPU guidance
 
-To install the `dataiku-plugin-tests-utils` package for your plugins, use the following line depending on your preferred way to managed packages.
+- **1.1.0** runs on a single **L40S (48 GB)**.
+- **2.0.0** needs a single GPU with **≥ 60 GB** (H100 80 GB or A100 80 GB). On an L40S it runs out of CUDA memory.
+- A model can't be split across several GPUs. Set *GPU memory (GB)* in the preset so the preflight
+  macro can catch a mismatch before you run anything.
 
-## Using requirements.txt
+## 3. Kubernetes deployment notes
 
-### Development
+- Deploy the NIM as a `NIMService` with a **plain PVC** for the model cache. **Don't use `NIMCache`**:
+  the NIM Operator can't read profiles for non-LLM NIMs, and the cache fails with
+  `no profiles are selected for caching`.
+- Give the pod **≥ 4 GiB of shared memory** (`sharedMemorySizeLimit: 4Gi`). Otherwise the pod fails at startup.
+- From DSS, use the **in-cluster service URL**, e.g.
+  `http://fourcastnet.nim-services.svc.cluster.local:8000`. Port-forwards and load balancers have idle
+  timeouts that cut long forecast streams.
+
+## 4. Quickstart
+
+1. **Preset.** In *Plugins → NVIDIA Earth-2 FourCastNet → Settings*, create an *Earth-2 FourCastNet NIM
+   connection* preset with deployment *Self-hosted NIM*, your base URL, model `fourcastnet-1.1.0` and
+   GPU memory `48`. Run the **Earth-2: preflight check** macro on it and check that every line says OK.
+2. **Fetch.** Add the *Earth-2: fetch initial conditions* recipe and select:
+   - the preset
+   - source *ERA5*
+   - time mode *Fixed*
+   - init time `2023-01-01T00:00:00Z`
+
+   It writes `era5_arco/fourcastnet-1.1.0/20230101T00.npy` (about 300 MB) to an output folder, e.g. `initial_conditions`.
+3. **Run.** Add *Earth-2: run forecast* on that folder and select:
+   - the same preset
+   - simulation length `6` (36 h, 7 files including lead 0)
+   - variables `u10m,v10m`
+
+   The output folder (e.g. `forecast`) receives `runs/init=2023-01-01T00/manifest.json` and `steps/*.npy`.
+4. **Extract.** Upload `resource/sample_sites.csv` from this plugin as a dataset `sites`. Then add
+   *Earth-2: extract to dataset* with inputs `forecast` and `sites`, and select:
+   - mode *Points*
+   - site columns `site_id`, `latitude`, `longitude`
+   - derived `wind_speed_10m`
+
+   The output `forecast_values` has one row per run, lead time, site and variable:
+
+| column | type |
+|---|---|
+| run_init_time | datetime (UTC) |
+| valid_time | datetime (UTC) |
+| lead_hours | int |
+| site_id | string |
+| latitude / longitude | double |
+| variable | string (`u10m`, `v10m`, `wind_speed_10m`, …) |
+| value | double |
+| model_id / source | string |
+
+Choose layout *Wide* to get one column per variable instead. In *Region* mode, rows are grid cells
+inside the bounding box (0.25°). `site_id` is then `"<lat>_<lon>"` and longitudes are given in −180..180.
+A box with `lon_min > lon_max` crosses the antimeridian. Boxes around the 0° meridian
+(e.g. −10..10) also work.
+
+## 5. Scenario example: daily operational forecast
+
+Set the fetch recipe to source *GFS* and time mode *Latest available*. The GFS safety margin defaults
+to 6 h, to allow for publication delay. Leave *Init time* empty in the run recipe, so it uses the latest
+initial condition in the folder. In the extract recipe, select *Latest run*.
+Then create a scenario with a time-based trigger (e.g. daily at 07:00 UTC) and one step that builds
+`forecast_values` recursively. Use run selection *All runs* if you want to keep a history for backtesting.
+
+For backfills, connect a dataset with a timestamp column to the optional *Init times* input of the fetch
+recipe. Each timestamp is rounded down to a 00/06/12/18 UTC cycle.
+
+## 6. How it works / design notes
+
+- Recipes only exchange data through the folders. The forecast folder's `manifest.json` records the
+  model, the source, the init time, the step length, the **output variable order** and the step files.
+  The extract recipe reads everything from the manifest and assumes no model.
+- Only `u10m,v10m` are requested by default. All channels come to about 300 MB per step.
+- Initial conditions are cached by `{source}/{model_id}/{time}`, and the shape is checked
+  (`(1, 1, n_channels, 721, 1440)`, float32) before anything is sent to the NIM.
+- If the NIM stream breaks, the steps received so far are kept and the manifest says
+  `status: "partial"`. Unless *Fail on partial forecast* is checked, the run recipe then succeeds with a
+  warning (if at least one step arrived). The extract recipe uses partial runs and logs a warning.
+- **`variables` parameter on 1.1.0:** it is not yet verified that NIM 1.1.0 honours it
+  (`supports_variables_param: unverified`). The client sends it, and if the NIM rejects it, retries once
+  without it. Run the live variable-order test against your NIM (see *Development*) and record the
+  result in `models.yaml` and here.
+
+## 7. Troubleshooting
+
+| Symptom | Cause | What to do |
+|---|---|---|
+| `size of tensor a (73) must match ... (72)` in NIM logs; the recipe reports a broken stream | Input variable list doesn't match the model version | Use the same preset (model) for fetch and run. The plugin checks the shape before sending; re-fetch if you changed models |
+| `CUDA out of memory` in NIM logs | 2.0.0 on a 48 GB GPU | Use 1.1.0 on L40S, or an 80 GB GPU. Set GPU memory in the preset and run the preflight macro |
+| NIM Operator `NIMCache`: `no profiles are selected for caching` | The operator can't read profiles for non-LLM NIMs | Deploy `NIMService` with a plain PVC, no `NIMCache` |
+| Hosted API returns `{"message":"Large asset written"}` | The hosted handoff of large outputs is broken | Plugin raises *HostedLargeAssetError*. Lower simulation length / variables, or self-host |
+| HTTP 400/500 on `/v1/infer` | Time format or array shape | The plugin sends RFC 3339 without fractional seconds and validates the shape. Check the NIM logs |
+| Slow or very large responses | ~300 MB per step with all 73 channels | Keep `variables=u10m,v10m`; use the region cell limit |
+| Pod fails at startup | Shared memory too small | `sharedMemorySizeLimit` ≥ 4 GiB |
+| "The NIM stream broke after N step(s)" | Server-side failure after HTTP 200, or an idle timeout on a proxy | Check the NIM pod logs; use the in-cluster service URL |
+
+The **NVIDIA hosted API** deployment is *experimental*. It uploads the input as an NVCF asset, then
+calls `https://climate.api.nvidia.com/v1/nvidia/fourcastnet` and polls for the result. The request body
+(`input_id`, `input_time`, `variables`, `simulation_length`, `ensemble_size`, `noise_amplitude`) has only
+been tested against fakes, not the live service.
+
+## Development
 
 ```
-git+https://github.com/dataiku/dataiku-plugin-tests-utils.git@<BRANCH>#egg=dataiku-plugin-tests-utils
+python-lib/earth2_dku/   pure-Python core (only dku/ and storage/dku_folder.py import dataiku)
+tests/python/unit/       unit tests: no DSS, no network, no Earth2Studio
+tests/python/live/       NIM / ERA5 / GFS integration tests (markers `nim`, `network`)
 ```
 
-Replace `<BRANCH>` with the most accurate value
+- `make unit-tests` runs the unit tests in a fresh venv.
+- `EARTH2_NIM_URL=http://host:8000 make live-tests` runs the live tests. These need the full code env.
+  Optionally, set `EARTH2_MODEL_ID` and `EARTH2_INPUT_NPY` (a pre-fetched initial condition) to skip the
+  ERA5 download.
+- `make plugin` builds the zip for *Plugins → Add plugin → Upload*.
 
-### Stable release
-
-```
-git+https://github.com/dataiku/dataiku-plugin-tests-utils.git@releases/tag/<RELEASE_VERSION>#egg=dataiku-plugin-tests-utils
-```
-
-Replace `<RELEASE_VERSION>` with the most accurate value
-
-## Using pipfile
-
-Put the following line under `[dev-packages]` section
-
-### Development cycle
-
-```
-dku-plugin-test-utils = {git = "https://github.com/dataiku/dataiku-plugin-tests-utils.git", ref = "<BRANCH>"}
-```
-
-### Stable release
-TBD
-
-## Dev env
-
-### Config
-
-First, ensure that you have personal API Keys for the DSS you want to target.
-Secondly, define a config file that will give the DSS you will target.
-```
-{
-	"DSSX":
-	{
-		"url": ".......",
-		"users": {
-			"usrA": "api_key",
-			"usrB": "api_key",
-			"default": "usrA"
-		},
-        "python_interpreter": ["PYTHON27", "PYTHON36"]
-
-	},
-	"DSSY":
-	{
-		"url": "......",
-		"users": {
-			"usrA": "api_key",
-			"usrB": "api_key",
-			"default": "usrB"
-		},
-        "python_interpreter": ["PYTHON36", "PYTHON39"]
-	}
-}
-
-```
-
-**BEWARE**: User names must be identical in the configuration file between the different DSS instances.
-Then, set the environment variable `PLUGIN_INTEGRATION_TEST_INSTANCE` to point to the config file.
-
-# How to use the package
-
-## General information
-
-To use the package in your test files:
-```python
-import dku_plugin_test_utils
-import dku_plugin_test_utils.subpakcage.subsymbol
-```
-Look at the next section for more information about potential `subpackage` and `subsymbol`.
-
-The python integration test files are indirections towards the "real" tests written as DSS scenarios on DSS instances.
-The python test function triggers the targeted DSS scenario and waits either for its successful or failed completion.
-Thence your test function should look like the following snippet :
-```python
-# Mandatory imports
-from dku_plugin_test_utils import dss_scenario
-
-def test_run_some_dss_scenario(user_dss_clients):
-     dss_scenario.run(user_clients, 'PROJECT_KEY', 'scenario_id', user="user1")
-
-# [... other tests ...]
-```
-With:
-- `user_dss_clients`: representing the DSS client corresponding to the desired user.
-- `PROJECT_KEY`: The project that holds the test scenarios
-- `scenario_id`: The test scenario to run
-- `user`: Specify the user to run the scenario with. It is an optional argument. By default, it is "default".
-
-## How to generate a graphical report with Allure for integration tests
-
-For each plugin, a folder named `allure_report` should exist inside the `test` folder; reports will be generated inside that folder.
-To generate the graphical report, you must have Allure installed on your system as described [on their installation guide](https://docs.qameta.io/allure/#_manual_installation). Once the installation is done, run the following :
-```shell
-allure serve path/to/the/allure_report/dir/inside/you/plugin/test/folder/
-```
-
-# Package hierarchy
-
-As it is a tooling package for integration tests, it will aggregate different packages with different goals. 
-The following hierarchy exposes the different sub-package contained in `dku_plugin_test_utils` with their aim 
-and the list of public symbols:
-
-- `run_config`:
-  - `ScenarioConfiguration`: Class exposing the parsed run configuration as a python dictionary.
-  - `PluginInfo`: Parse the plugin.json and the code-env desc.json files to extract plugin metadata as a python dictionary.
-- `dss_scenario`: 
-  - `run`: Run the target DSS scenario and wait for its completion (either success or failure).
+To add a model version, add an entry to `models.yaml` and a choice to the preset's `model_id` (a unit
+test checks that the two stay in sync).

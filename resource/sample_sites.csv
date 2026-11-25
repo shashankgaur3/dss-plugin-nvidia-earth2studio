@@ -1,0 +1,9 @@
+site_id,name,latitude,longitude
+SITE_A,Site A - West Texas,32.45,-101.85
+SITE_B,Site B - Iowa,42.75,-94.35
+SITE_C,Site C - North Sea,54.05,2.95
+SITE_D,Site D - Baltic Coast,54.35,12.65
+SITE_E,Site E - Atlantic Iberia,43.25,-8.95
+SITE_F,Site F - South Australia,-33.15,138.45
+SITE_G,Site G - Inner Mongolia,41.55,111.75
+SITE_H,Site H - Patagonia,-46.45,-67.55

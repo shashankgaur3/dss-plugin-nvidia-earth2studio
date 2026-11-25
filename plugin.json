@@ -1,17 +1,21 @@
 {
-    "id": "your-plugin-id",
+    "id": "nvidia-earth2",
     "version": "0.1.0",
     "meta": {
-        "label": "Plugin template - Replace by your plugin label",
-        "category": "Your category (optional)",
-        "description": "Your description (keep it short and simple)",
-        "author": "Organization (firstName LASTNAME)",
-        "icon": "icon-font-awesome-3.2.1",
+        "label": "NVIDIA Earth-2 FourCastNet",
+        "category": "Weather & Climate",
+        "description": "Run NVIDIA Earth-2 FourCastNet weather forecasts served as a NIM, and turn the output into Dataiku datasets (e.g. wind forecasts at your sites).",
+        "author": "Dataiku (Shashank GAUR)",
+        "icon": "icon-cloud",
         "licenseInfo": "Apache Software License",
-        "url": "https://www.dataiku.com/product/plugins/your-plugin-id/",
+        "url": "https://www.dataiku.com/product/plugins/nvidia-earth2/",
         "tags": [
-            "myTag"
+            "Weather",
+            "Forecasting",
+            "NVIDIA",
+            "Energy"
         ],
         "supportLevel": "NOT_SUPPORTED"
-    }
+    },
+    "params": []
 }

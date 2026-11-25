@@ -1,0 +1,174 @@
+{
+    "meta": {
+        "label": "Earth-2: extract to dataset",
+        "description": "Turn forecast runs into a dataset: values at your sites (points) or over a bounding box (region), with derived variables such as wind speed.",
+        "icon": "icon-table"
+    },
+    "kind": "PYTHON",
+    "selectableFromFolder": "forecast",
+    "inputRoles": [
+        {
+            "name": "forecast",
+            "label": "Forecast folder",
+            "description": "Output of the 'run forecast' recipe",
+            "arity": "UNARY",
+            "required": true,
+            "acceptsDataset": false,
+            "acceptsManagedFolder": true
+        },
+        {
+            "name": "sites",
+            "label": "Sites (points mode)",
+            "description": "Dataset with a site id, latitude and longitude (-180..180 or 0..360)",
+            "arity": "UNARY",
+            "required": false,
+            "acceptsDataset": true
+        }
+    ],
+    "outputRoles": [
+        {
+            "name": "forecast_values",
+            "label": "Forecast values",
+            "description": "One row per run, lead time, site and variable (long) or per run, lead time and site (wide)",
+            "arity": "UNARY",
+            "required": true,
+            "acceptsDataset": true
+        }
+    ],
+    "params": [
+        {
+            "name": "sep_runs",
+            "label": "Runs",
+            "type": "SEPARATOR"
+        },
+        {
+            "name": "run_selection",
+            "label": "Runs to extract",
+            "type": "SELECT",
+            "defaultValue": "latest",
+            "selectChoices": [
+                {"value": "latest", "label": "Latest run"},
+                {"value": "all", "label": "All runs"},
+                {"value": "specific", "label": "Specific init time"}
+            ]
+        },
+        {
+            "name": "init_time",
+            "label": "Init time (UTC)",
+            "type": "STRING",
+            "visibilityCondition": "model.run_selection == 'specific'"
+        },
+        {
+            "name": "sep_where",
+            "label": "Where",
+            "type": "SEPARATOR"
+        },
+        {
+            "name": "mode",
+            "label": "Mode",
+            "type": "SELECT",
+            "defaultValue": "points",
+            "selectChoices": [
+                {"value": "points", "label": "Points (sites dataset)"},
+                {"value": "region", "label": "Region (bounding box)"}
+            ]
+        },
+        {
+            "name": "site_id_column",
+            "label": "Site id column",
+            "type": "COLUMN",
+            "columnRole": "sites",
+            "visibilityCondition": "model.mode == 'points'"
+        },
+        {
+            "name": "lat_column",
+            "label": "Latitude column",
+            "type": "COLUMN",
+            "columnRole": "sites",
+            "visibilityCondition": "model.mode == 'points'"
+        },
+        {
+            "name": "lon_column",
+            "label": "Longitude column",
+            "type": "COLUMN",
+            "columnRole": "sites",
+            "visibilityCondition": "model.mode == 'points'"
+        },
+        {
+            "name": "interpolation",
+            "label": "Interpolation",
+            "type": "SELECT",
+            "defaultValue": "nearest",
+            "visibilityCondition": "model.mode == 'points'",
+            "selectChoices": [
+                {"value": "nearest", "label": "Nearest grid point"},
+                {"value": "bilinear", "label": "Bilinear"}
+            ]
+        },
+        {
+            "name": "lat_min",
+            "label": "Latitude min",
+            "type": "DOUBLE",
+            "visibilityCondition": "model.mode == 'region'"
+        },
+        {
+            "name": "lat_max",
+            "label": "Latitude max",
+            "type": "DOUBLE",
+            "visibilityCondition": "model.mode == 'region'"
+        },
+        {
+            "name": "lon_min",
+            "label": "Longitude min",
+            "type": "DOUBLE",
+            "description": "-180..180. A box with lon_min > lon_max crosses the antimeridian",
+            "visibilityCondition": "model.mode == 'region'"
+        },
+        {
+            "name": "lon_max",
+            "label": "Longitude max",
+            "type": "DOUBLE",
+            "visibilityCondition": "model.mode == 'region'"
+        },
+        {
+            "name": "max_cells",
+            "label": "Cell warning limit",
+            "type": "INT",
+            "defaultValue": 50000,
+            "description": "Log a warning when the box covers more grid cells per step",
+            "visibilityCondition": "model.mode == 'region'"
+        },
+        {
+            "name": "sep_what",
+            "label": "What",
+            "type": "SEPARATOR"
+        },
+        {
+            "name": "variables",
+            "label": "Variables",
+            "type": "STRING",
+            "description": "Comma-separated. Leave empty for all variables in the forecast run"
+        },
+        {
+            "name": "derived",
+            "label": "Derived variables",
+            "type": "MULTISELECT",
+            "selectChoices": [
+                {"value": "wind_speed_10m", "label": "10 m wind speed (m/s) from u10m, v10m"},
+                {"value": "wind_speed_100m", "label": "100 m wind speed (m/s) from u100m, v100m"},
+                {"value": "t2m_celsius", "label": "2 m temperature (deg C) from t2m"}
+            ]
+        },
+        {
+            "name": "layout",
+            "label": "Layout",
+            "type": "SELECT",
+            "defaultValue": "long",
+            "selectChoices": [
+                {"value": "long", "label": "Long (one row per variable)"},
+                {"value": "wide", "label": "Wide (one column per variable)"}
+            ]
+        }
+    ],
+    "resourceKeys": []
+}

@@ -1,2 +1,9 @@
-pytest~=6.2
-allure-pytest~=2.8
+# Unit tests run without DSS, without network and without Earth2Studio.
+pytest>=7
+allure-pytest>=2.8
+numpy
+pandas
+scipy
+xarray
+requests
+pyyaml

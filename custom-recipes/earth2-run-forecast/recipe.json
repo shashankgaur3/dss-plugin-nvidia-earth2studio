@@ -1,0 +1,68 @@
+{
+    "meta": {
+        "label": "Earth-2: run forecast",
+        "description": "Send an initial condition to the FourCastNet NIM and store the forecast steps and a manifest in a managed folder.",
+        "icon": "icon-play"
+    },
+    "kind": "PYTHON",
+    "selectableFromFolder": "initial_conditions",
+    "inputRoles": [
+        {
+            "name": "initial_conditions",
+            "label": "Initial conditions folder",
+            "description": "Output of the 'fetch initial conditions' recipe",
+            "arity": "UNARY",
+            "required": true,
+            "acceptsDataset": false,
+            "acceptsManagedFolder": true
+        }
+    ],
+    "outputRoles": [
+        {
+            "name": "forecast",
+            "label": "Forecast folder",
+            "description": "Receives runs/init=<time>/manifest.json and steps/*.npy",
+            "arity": "UNARY",
+            "required": true,
+            "acceptsDataset": false,
+            "acceptsManagedFolder": true
+        }
+    ],
+    "params": [
+        {
+            "name": "connection",
+            "label": "NIM connection",
+            "type": "PRESET",
+            "parameterSetId": "earth2-nim-connection",
+            "mandatory": true
+        },
+        {
+            "name": "init_time",
+            "label": "Init time (UTC)",
+            "type": "STRING",
+            "description": "Leave empty to use the latest initial condition present in the input folder"
+        },
+        {
+            "name": "simulation_length",
+            "label": "Simulation length (steps)",
+            "type": "INT",
+            "defaultValue": 6,
+            "description": "Number of 6-hour steps. N steps produce N+1 files (lead 0 is the initial state)"
+        },
+        {
+            "name": "variables",
+            "label": "Variables",
+            "type": "STRING",
+            "defaultValue": "u10m,v10m",
+            "description": "Comma-separated. Leave empty for all model variables (~300 MB per step)"
+        },
+        {
+            "name": "fail_on_partial",
+            "label": "Fail on partial forecast",
+            "type": "BOOLEAN",
+            "defaultValue": false,
+            "description": "If unchecked, a stream that breaks after at least one step keeps the partial run and the recipe succeeds with a warning"
+        }
+    ],
+    "resourceKeys": []
+}
